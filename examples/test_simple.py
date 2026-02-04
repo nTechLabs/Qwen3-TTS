@@ -30,7 +30,7 @@ def main():
 
     # Reference audio
     ref_audio_path = os.path.join(project_root, "assets", "Donald_Trump_VoiceSample.wav")
-    ref_text = "Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you."
+    ref_text = "Thank you very much. A short time ago, the U.S. military carried out massive precision strikes on the three key nuclear facilities."
 
     # Read synthesis text from file
     input_txt_path = os.path.join(INPUT_DIR, "test.txt")
@@ -49,7 +49,7 @@ def main():
         language=syn_lang,
         ref_audio=ref_audio_path,
         ref_text=ref_text,
-        x_vector_only_mode=False,
+        x_vector_only_mode=True,
         max_new_tokens=2048,
         do_sample=True,
         top_k=50,
@@ -65,8 +65,9 @@ def main():
     t1 = time.time()
     print(f"Generation completed in {t1 - t0:.3f}s")
 
-    # Save only the first audio
-    output_path = os.path.join(OUT_DIR, "output.wav")
+    # Save only the first audio (use same name as input file)
+    input_filename = os.path.splitext(os.path.basename(input_txt_path))[0]
+    output_path = os.path.join(OUT_DIR, f"{input_filename}.wav")
     sf.write(output_path, wavs[0], sr)
     print(f"Audio saved to: {output_path}")
 
