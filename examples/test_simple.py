@@ -10,7 +10,13 @@ from qwen_tts import Qwen3TTSModel
 def main():
     device = "cpu"
     MODEL_PATH = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
-    OUT_DIR = "output_wav"
+    
+    # Get project root directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    
+    OUT_DIR = os.path.join(project_root, "output_wav")
+    INPUT_DIR = os.path.join(project_root, "input_txt")
     os.makedirs(OUT_DIR, exist_ok=True)
 
     print("Loading model...")
@@ -23,11 +29,16 @@ def main():
     print("Model loaded!")
 
     # Reference audio
-    ref_audio_path = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone_2.wav"
+    ref_audio_path = os.path.join(project_root, "assets", "Donald_Trump_VoiceSample.wav")
     ref_text = "Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you."
 
-    # Synthesis target
-    syn_text = "Good one. Okay, fine, I'm just gonna leave this sock monkey here. Goodbye."
+    # Read synthesis text from file
+    input_txt_path = os.path.join(INPUT_DIR, "test.txt")
+    print(f"Reading text from: {input_txt_path}")
+    with open(input_txt_path, "r", encoding="utf-8") as f:
+        syn_text = f.read().strip()
+    
+    print(f"Text to synthesize: {syn_text}")
     syn_lang = "Auto"
 
     print("Generating speech...")
