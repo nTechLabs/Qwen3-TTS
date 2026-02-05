@@ -19,6 +19,23 @@ def main():
         print(f"Error: File not found: {wav_file_path}")
         sys.exit(1)
     
+    # Read the corresponding text file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    input_dir = os.path.join(project_root, "input_txt")
+    
+    # Get the base filename without extension (keep timestamp)
+    wav_basename = os.path.splitext(os.path.basename(wav_file_path))[0]
+    txt_file_path = os.path.join(input_dir, f"{wav_basename}.txt")
+    
+    # Read the text content
+    if os.path.exists(txt_file_path):
+        with open(txt_file_path, "r", encoding="utf-8") as f:
+            text_content = f.read().strip()
+        initial_comment = f"🎤 한국어 TTS 음성 파일입니다\n\n텍스트:\n\"{text_content}\""
+    else:
+        initial_comment = f"🎤 한국어 TTS 음성 파일입니다\n\n파일: {wav_basename}.wav"
+    
     # Get Slack token from environment
     slack_token = os.environ.get("SLACK_BOT_TOKEN")
     if not slack_token:
@@ -35,7 +52,7 @@ def main():
             channel=channel_id,
             file=wav_file_path,
             title=os.path.basename(wav_file_path),
-            initial_comment="🎤 한국어 TTS 음성 파일입니다\n\n텍스트:\n\"나는 내가 빛나는 별인 줄 알았어요\n한 번도 의심한 적 없었죠\n몰랐어요, 난 내가 벌레라는 것을\n그래도 괜찮아, 난 눈부시니까\""
+            initial_comment=initial_comment
         )
         
         print("✅ File uploaded successfully!")
