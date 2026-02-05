@@ -2,6 +2,8 @@
 import os
 import sys
 import time
+import shutil
+from datetime import datetime
 import torch
 import soundfile as sf
 
@@ -74,9 +76,17 @@ def main():
     t1 = time.time()
     print(f"Generation completed in {t1 - t0:.3f}s")
 
-    # Save only the first audio (use same name as input file)
+    # Create timestamp for both input and output files
     input_filename = os.path.splitext(os.path.basename(input_txt_path))[0]
-    output_path = os.path.join(OUT_DIR, f"{input_filename}.wav")
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    # Copy input txt file with timestamp
+    timestamped_txt_path = os.path.join(INPUT_DIR, f"{input_filename}_{timestamp}.txt")
+    shutil.copy2(input_txt_path, timestamped_txt_path)
+    print(f"Input text copied to: {timestamped_txt_path}")
+    
+    # Save audio with same timestamp
+    output_path = os.path.join(OUT_DIR, f"{input_filename}_{timestamp}.wav")
     sf.write(output_path, wavs[0], sr)
     print(f"Audio saved to: {output_path}")
 
