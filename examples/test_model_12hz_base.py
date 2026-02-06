@@ -13,10 +13,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import time
 import torch
 import soundfile as sf
+import time
+import os
 
 from qwen_tts import Qwen3TTSModel
 
