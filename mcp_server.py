@@ -48,21 +48,21 @@ def generate_voice(
     if tts_model is None:
         load_model()
 
-    # Normalize input types
-    if isinstance(text, dict) and "text" in text:
-        text = text["text"]
-    elif isinstance(text, (list, tuple)):
-        text = "\n".join([str(item) for item in text])
-    elif isinstance(text, (bytes, bytearray)):
-        text = text.decode("utf-8", errors="replace")
+    # # Normalize input types
+    # if isinstance(text, dict) and "text" in text:
+    #     text = text["text"]
+    # elif isinstance(text, (list, tuple)):
+    #     text = "\n".join([str(item) for item in text])
+    # elif isinstance(text, (bytes, bytearray)):
+    #     text = text.decode("utf-8", errors="replace")
 
-    if not isinstance(text, str):
-        text = str(text)
+    # if not isinstance(text, str):
+    #     text = str(text)
 
-    if isinstance(language, (list, tuple)):
-        language = language[0] if language else "Auto"
-    elif isinstance(language, (bytes, bytearray)):
-        language = language.decode("utf-8", errors="replace")
+    # if isinstance(language, (list, tuple)):
+    #     language = language[0] if language else "Auto"
+    # elif isinstance(language, (bytes, bytearray)):
+    #     language = language.decode("utf-8", errors="replace")
 
     text = text.strip()
     if not text:
