@@ -23,3 +23,5 @@ wheels/
 venv/
 env/
 qwen3_tts_test_voice_clone_output_wav/
+audio/
+output_wav/
