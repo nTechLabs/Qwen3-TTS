@@ -88,6 +88,7 @@ with st.sidebar:
 # ── session_state 초기화 ─────────────────────────────────────────
 for key, default in [
     ("stt_text", ""),
+    ("tts_input_text", ""),
     ("wav_bytes", None),
     ("wav_filename", "output.wav"),
     ("stt_elapsed", None),
@@ -99,6 +100,12 @@ for key, default in [
 # ── 타이틀 ──────────────────────────────────────────────────────
 st.title("🎙️ Voice Copy")
 st.caption("오디오 파일 → STT 전사 → TTS 음성 합성 파이프라인")
+
+auto_mode = st.checkbox(
+    "🔄 Auto — STEP1 파일을 ref_audio, STEP2 텍스트를 ref_text 로 자동 사용",
+    value=False,
+    key="auto_mode",
+)
 
 # ════════════════════════════════════════════════════════════════
 # STEP 1 · 오디오 업로드 & STT
@@ -174,71 +181,117 @@ char_count = len(edited_text.strip())
 st.caption(f"글자 수: {char_count}자")
 
 # ════════════════════════════════════════════════════════════════
-# STEP 3 · TTS 실행 & WAV 재생
+# STEP 3 · TTS 변환 텍스트 입력
 # ════════════════════════════════════════════════════════════════
 st.divider()
-st.markdown("## STEP 3 · 음성 합성 (TTS) & 재생")
+st.markdown("## STEP 3 · TTS 변환 텍스트 입력")
+st.caption("이 텍스트가 음성(TTS)으로 변환됩니다. STEP2 내용과 별개입니다.")
 
-# ── 참조 파일 선택 (접힌 상태로 시작) ────────────────────────────
-with st.expander(
-    "🎤 참조 음성 파일 변경 (선택 · 미입력 시 기본값: assets/Donald_Trump_VoiceSample.wav)",
-    expanded=False,
-):
-    tts_ref_audio = st.file_uploader(
-        "참조 음성 파일 (ref_audio_file)",
-        type=["mp3", "wav", "m4a", "ogg", "flac", "webm"],
-        key="tts_ref_audio",
-        help="업로드하지 않으면 서버의 assets/Donald_Trump_VoiceSample.wav 를 사용합니다.",
-    )
-    if tts_ref_audio:
-        st.audio(tts_ref_audio, format=f"audio/{tts_ref_audio.name.rsplit('.', 1)[-1]}")
-        st.caption(f"선택된 파일: {tts_ref_audio.name}")
+tts_input_text = st.text_area(
+    "TTS로 변환할 텍스트를 입력하세요",
+    value=st.session_state.tts_input_text,
+    height=200,
+    key="tts_input_area",
+    placeholder="여기에 입력한 텍스트가 음성으로 변환됩니다.",
+)
+st.session_state.tts_input_text = tts_input_text
 
+tts_char_count = len(tts_input_text.strip())
+st.caption(f"글자 수: {tts_char_count}자")
+
+# ════════════════════════════════════════════════════════════════
+# STEP 4 · 음성 합성 (TTS) & 재생
+# ════════════════════════════════════════════════════════════════
+st.divider()
+st.markdown("## STEP 4 · 음성 합성 (TTS) & 재생")
+
+# ── 참조 음성 파일 ────────────────────────────────────────────────
 with st.expander(
-    "📄 참조 텍스트 파일 변경 (선택 · 미입력 시 기본값: assets/ref_file.txt)",
-    expanded=False,
+    "🎤 참조 음성 파일 (ref_audio_file) — Auto 시 STEP1 파일 자동 사용",
+    expanded=auto_mode,
 ):
-    tts_ref_text_file = st.file_uploader(
-        "참조 텍스트 파일 (ref_file, .txt)",
-        type=["txt"],
-        key="tts_ref_file",
-        help="업로드하지 않으면 서버의 assets/ref_file.txt 를 사용합니다.",
-    )
-    if tts_ref_text_file:
-        preview = tts_ref_text_file.read().decode("utf-8", errors="replace")
-        tts_ref_text_file.seek(0)
-        st.caption(f"선택된 파일: {tts_ref_text_file.name}")
-        st.text(preview[:200] + ("..." if len(preview) > 200 else ""))
+    if auto_mode:
+        if audio_file:
+            st.info(f"✅ Auto: STEP1 파일 사용 → **{audio_file.name}**")
+            audio_file.seek(0)
+            st.audio(audio_file, format=f"audio/{audio_file.name.rsplit('.', 1)[-1]}")
+        else:
+            st.warning("⚠️ STEP1 에서 오디오 파일을 먼저 업로드하세요.")
+        tts_ref_audio = None
+    else:
+        tts_ref_audio = st.file_uploader(
+            "참조 음성 파일 (ref_audio_file)",
+            type=["mp3", "wav", "m4a", "ogg", "flac", "webm"],
+            key="tts_ref_audio",
+            help="업로드하지 않으면 서버의 assets/Donald_Trump_VoiceSample.wav 를 사용합니다.",
+        )
+        if tts_ref_audio:
+            st.audio(tts_ref_audio, format=f"audio/{tts_ref_audio.name.rsplit('.', 1)[-1]}")
+            st.caption(f"선택된 파일: {tts_ref_audio.name}")
+
+# ── 참조 텍스트 ───────────────────────────────────────────────────
+with st.expander(
+    "📄 참조 텍스트 (ref_text) — Auto 시 STEP2 텍스트 자동 사용",
+    expanded=auto_mode,
+):
+    if auto_mode:
+        if edited_text.strip():
+            st.info("✅ Auto: STEP2 전사 텍스트를 ref_text 로 사용합니다.")
+            st.text(edited_text[:200] + ("..." if len(edited_text) > 200 else ""))
+        else:
+            st.warning("⚠️ STEP2 에서 텍스트를 먼저 입력하거나 STT를 실행하세요.")
+        tts_ref_text_file = None
+    else:
+        tts_ref_text_file = st.file_uploader(
+            "참조 텍스트 파일 (ref_file, .txt)",
+            type=["txt"],
+            key="tts_ref_file",
+            help="업로드하지 않으면 서버의 assets/ref_file.txt 를 사용합니다.",
+        )
+        if tts_ref_text_file:
+            preview = tts_ref_text_file.read().decode("utf-8", errors="replace")
+            tts_ref_text_file.seek(0)
+            st.caption(f"선택된 파일: {tts_ref_text_file.name}")
+            st.text(preview[:200] + ("..." if len(preview) > 200 else ""))
 
 tts_btn = st.button(
     "▶ TTS 생성",
-    disabled=(char_count == 0),
+    disabled=(tts_char_count == 0),
     use_container_width=True,
     type="primary",
 )
 
 if tts_btn:
-    if not edited_text.strip():
-        st.warning("텍스트를 입력하거나 STEP 1에서 STT를 먼저 실행하세요.")
+    if not tts_input_text.strip():
+        st.warning("STEP 3에서 TTS로 변환할 텍스트를 먼저 입력하세요.")
     else:
-        # 텍스트를 TXT 파일로 변환
         base_name = audio_file.name.rsplit(".", 1)[0] if audio_file else "input"
         txt_filename = f"{base_name}.txt"
-        txt_bytes = edited_text.strip().encode("utf-8")
+        # ★ STEP3 입력 텍스트가 TTS 변환 대상
+        txt_bytes = tts_input_text.strip().encode("utf-8")
 
         with st.spinner("음성을 합성 중... (수 분 소요될 수 있습니다)"):
             try:
                 files = {
                     "file": (txt_filename, io.BytesIO(txt_bytes), "text/plain"),
                 }
-                if tts_ref_audio:
-                    tts_ref_audio.seek(0)
+                # ref_audio_file: Auto 시 STEP1 파일, 아닐 경우 사용자 선택 파일
+                _ref_audio = audio_file if auto_mode else tts_ref_audio
+                if _ref_audio:
+                    _ref_audio.seek(0)
                     files["ref_audio_file"] = (
-                        tts_ref_audio.name,
-                        tts_ref_audio.read(),
-                        tts_ref_audio.type or "audio/wav",
+                        _ref_audio.name,
+                        _ref_audio.read(),
+                        _ref_audio.type or "audio/wav",
                     )
-                if tts_ref_text_file:
+                # ref_file: Auto 시 STEP2 텍스트, 아닐 경우 사용자 선택 파일
+                if auto_mode and edited_text.strip():
+                    files["ref_file"] = (
+                        "ref_text_auto.txt",
+                        io.BytesIO(edited_text.strip().encode("utf-8")),
+                        "text/plain",
+                    )
+                elif not auto_mode and tts_ref_text_file:
                     tts_ref_text_file.seek(0)
                     files["ref_file"] = (
                         tts_ref_text_file.name,
