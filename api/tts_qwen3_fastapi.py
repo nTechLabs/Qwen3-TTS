@@ -1,3 +1,5 @@
+import collections
+import logging
 import os
 import sys
 import time
@@ -11,9 +13,54 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from qwen_tts import Qwen3TTSModel
 
-# stt 모듈 임포트 (프로젝트 루트 기준)
+# stt 모듈 임포트 (프로젝트 루트를 sys.path 에 추가 후 임포트)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from stt.whisper_main import transcribe as whisper_transcribe
+from stt.whisper_main import transcribe as whisper_transcribe  # noqa: E402
+
+# ── 로깅 설정 ────────────────────────────────────────────────
+LOG_MAX_LINES = 200  # 메모리에 보관할 최대 로그 줄 수
+_log_buffer: collections.deque = collections.deque(maxlen=LOG_MAX_LINES)
+
+
+class _DequeHandler(logging.Handler):
+    """최근 로그를 deque 에 보관하는 핸들러 (GET /logs 용)."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        _log_buffer.append(self.format(record))
+
+
+def _setup_logging() -> logging.Logger:
+    fmt = logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger = logging.getLogger("qwen_api")
+    logger.setLevel(logging.DEBUG)
+    if logger.handlers:  # 중복 핸들러 방지
+        return logger
+
+    # 콘솔
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(fmt)
+    logger.addHandler(ch)
+
+    # 메모리 버퍼
+    dh = _DequeHandler()
+    dh.setFormatter(fmt)
+    logger.addHandler(dh)
+
+    # 파일 (PROJECT_ROOT/api_server.log)
+    log_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "api_server.log"
+    )
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+
+    return logger
+
+
+log = _setup_logging()
 
 # ── 경로 설정 ───────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,16 +85,18 @@ tts_model: Qwen3TTSModel = None
 async def lifespan(app: FastAPI):
     """서버 시작 시 모델을 한 번만 로드합니다."""
     global tts_model
-    print("Loading Qwen3-TTS model...")
+    log.info("[STARTUP] Loading Qwen3-TTS model: %s", MODEL_PATH)
+    log.info("[STARTUP] ref_audio : %s", REF_AUDIO_PATH)
+    log.info("[STARTUP] ref_text  : %s", REF_TEXT)
     tts_model = Qwen3TTSModel.from_pretrained(
         MODEL_PATH,
         device_map="cpu",
         dtype=torch.float32,
         attn_implementation="eager",
     )
-    print("Model loaded successfully!")
+    log.info("[STARTUP] Model loaded successfully!")
     yield
-    print("Server shutting down.")
+    log.info("[SHUTDOWN] Server shutting down.")
 
 
 app = FastAPI(
@@ -61,6 +110,13 @@ app = FastAPI(
 @app.get("/health")
 async def health():
     return {"status": "ok", "model_loaded": tts_model is not None}
+
+
+@app.get("/logs")
+async def get_logs(n: int = 100):
+    """최근 로그 n 줄을 반환합니다 (기본값 100)."""
+    lines = list(_log_buffer)[-n:]
+    return JSONResponse(content={"lines": lines, "total": len(_log_buffer)})
 
 
 @app.post("/tts")
@@ -93,7 +149,18 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
         f.write(syn_text)
 
     # ── 음성 생성 ──────────────────────────────────────────────
-    print(f"[{timestamp}] Generating TTS for: {file.filename}")
+    log.info("[TTS] ── 요청 시작 ──────────────────────────")
+    log.info("[TTS] 파일명      : %s", file.filename)
+    log.info(
+        "[TTS] 입력 텍스트 : %s",
+        syn_text[:120] + ("..." if len(syn_text) > 120 else ""),
+    )
+    log.info("[TTS] ref_audio  : %s", REF_AUDIO_PATH)
+    log.info("[TTS] ref_text   : %s", REF_TEXT)
+    log.info(
+        "[TTS] 파라미터   : language=Auto x_vector_only=True max_new_tokens=2048 "
+        "temperature=0.9 top_k=50 top_p=1.0 repetition_penalty=1.05"
+    )
     t0 = time.time()
     try:
         wavs, sr = tts_model.generate_voice_clone(
@@ -114,16 +181,17 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
             subtalker_temperature=0.9,
         )
     except Exception as e:
+        log.error("[TTS] 생성 실패: %s", e)
         raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
 
     elapsed = time.time() - t0
-    print(f"[{timestamp}] Done in {elapsed:.2f}s")
+    log.info("[TTS] 생성 완료  : %.2fs", elapsed)
 
     # ── WAV 저장 ───────────────────────────────────────────────
     output_filename = f"{base_name}_{timestamp}.wav"
     output_path = os.path.join(OUT_DIR, output_filename)
     sf.write(output_path, wavs[0], sr)
-    print(f"[{timestamp}] Saved: {output_path}")
+    log.info("[TTS] 저장 완료  : %s", output_path)
 
     # ── WAV 파일 반환 ──────────────────────────────────────────
     return FileResponse(
@@ -167,15 +235,20 @@ async def stt(
     with open(saved_audio_path, "wb") as f:
         f.write(raw)
 
-    print(f"[{timestamp}] STT 요청: {file.filename}")
+    log.info("[STT] ── 요청 시작 ──────────────────────────")
+    log.info("[STT] 파일명      : %s", file.filename)
+    log.info("[STT] 저장 경로   : %s", saved_audio_path)
+    log.info("[STT] 파일 크기   : %d bytes", len(raw))
     t0 = time.time()
     try:
         text = whisper_transcribe(saved_audio_path, save_result=True)
     except Exception as e:
+        log.error("[STT] 변환 실패: %s", e)
         raise HTTPException(status_code=500, detail=f"STT failed: {e}")
 
     elapsed = time.time() - t0
-    print(f"[{timestamp}] STT 완료 ({elapsed:.2f}s): {text[:80]}...")
+    log.info("[STT] 변환 완료  : %.2fs", elapsed)
+    log.info("[STT] 전사 결과  : %s", text[:120] + ("..." if len(text) > 120 else ""))
 
     return JSONResponse(
         content={
