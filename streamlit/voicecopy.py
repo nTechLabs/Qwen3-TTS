@@ -226,7 +226,9 @@ with st.expander(
             help="업로드하지 않으면 서버의 assets/Donald_Trump_VoiceSample.wav 를 사용합니다.",
         )
         if tts_ref_audio:
-            st.audio(tts_ref_audio, format=f"audio/{tts_ref_audio.name.rsplit('.', 1)[-1]}")
+            st.audio(
+                tts_ref_audio, format=f"audio/{tts_ref_audio.name.rsplit('.', 1)[-1]}"
+            )
             st.caption(f"선택된 파일: {tts_ref_audio.name}")
 
 # ── 참조 텍스트 ───────────────────────────────────────────────────
