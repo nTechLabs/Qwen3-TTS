@@ -39,16 +39,24 @@ try:
     # 간단한 텍스트로 테스트
     syn_text = "Hello, this is a test of Qwen3 TTS system."
 
-    audio = tts.generate(
+    # Base 모델은 voice clone 방식 사용 (ref_audio + ref_text 필요)
+    ref_audio_path = os.path.join(
+        os.path.dirname(__file__), "assets", "Donald_Trump_VoiceSample.wav"
+    )
+    ref_text = "Thank you very much. A short time ago, the U.S. military carried out massive precision strikes on the three key nuclear facilities."
+
+    wavs, sr = tts.generate_voice_clone(
         text=syn_text,
+        language="Auto",
+        ref_audio=ref_audio_path,
+        ref_text=ref_text,
         max_new_tokens=10000,
-        do_sample=False,
-        return_dict=False,
+        do_sample=True,
     )
 
     # 음성 저장
     output_path = os.path.join(OUT_DIR, "quick_test_output.wav")
-    sf.write(output_path, audio, samplerate=12000)
+    sf.write(output_path, wavs[0], samplerate=sr)
 
     print("   ✓ 음성 생성 성공!")
     print(f"   저장 경로: {output_path}")
