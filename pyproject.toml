@@ -28,6 +28,7 @@ dependencies = [
   "sox",
   "onnxruntime",
   "einops",
+  "whisper>=1.1.10",
 ]
 
 [project.urls]
