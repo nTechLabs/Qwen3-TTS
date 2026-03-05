@@ -14,3 +14,6 @@ fastapi
 .\.venv\Scripts\python.exe -m uvicorn api.tts_qwen3_fastapi:app --host 127.0.0.1 --port 8000 --reload
 
 .\.venv\Scripts\python.exe .\stt\whisper_main.py Leejamsample.mp3
+
+streamlit
+.\.venv\Scripts\python.exe -m streamlit run streamlit/voicecopy.py 2>&1

@@ -2,6 +2,7 @@ import collections
 import logging
 import os
 import sys
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -120,9 +121,20 @@ async def get_logs(n: int = 100):
 
 
 @app.post("/tts")
-async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드하세요")):
+async def tts(
+    file: UploadFile = File(..., description="합성할 텍스트 .txt 파일"),
+    ref_audio_file: UploadFile | None = File(
+        None,
+        description="참조 음성 파일 (미지정 시 기본값: assets/Donald_Trump_VoiceSample.wav)",
+    ),
+    ref_file: UploadFile | None = File(
+        None,
+        description="참조 텍스트 .txt 파일 (미지정 시 기본값: assets/ref_file.txt)",
+    ),
+):
     """
-    업로드된 .txt 파일의 텍스트를 Trump 음성으로 합성하여 WAV 파일로 반환합니다.
+    업로드된 .txt 파일의 텍스트를 음성으로 합성하여 WAV 파일로 반환합니다.
+    ref_audio_file / ref_file 을 선택적으로 업로드하면 해당 파일을 참조로 사용합니다.
     """
     if tts_model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded yet.")
@@ -148,6 +160,43 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
     with open(saved_txt_path, "w", encoding="utf-8") as f:
         f.write(syn_text)
 
+    # ── 참조 음성 결정 ─────────────────────────────────────────
+    _tmp_files = []  # 요청 완료 후 삭제할 임시 파일 목록
+    if ref_audio_file and ref_audio_file.filename:
+        audio_raw = await ref_audio_file.read()
+        ext = os.path.splitext(ref_audio_file.filename)[1] or ".wav"
+        tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=OUT_DIR)
+        tmp_audio.write(audio_raw)
+        tmp_audio.close()
+        _tmp_files.append(tmp_audio.name)
+        used_ref_audio = tmp_audio.name
+        log.info("[TTS] ref_audio  : (uploaded) %s", ref_audio_file.filename)
+    else:
+        used_ref_audio = REF_AUDIO_PATH
+        log.info("[TTS] ref_audio  : (default) %s", used_ref_audio)
+
+    # ── 참조 텍스트 결정 ───────────────────────────────────────
+    if ref_file and ref_file.filename:
+        ref_raw = await ref_file.read()
+        try:
+            used_ref_text = ref_raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            used_ref_text = ref_raw.decode("cp949", errors="replace").strip()
+        log.info(
+            "[TTS] ref_text   : (uploaded) %s  →  %s",
+            ref_file.filename,
+            used_ref_text[:60],
+        )
+    else:
+        _default_ref_txt = os.path.join(PROJECT_ROOT, "assets", "ref_file.txt")
+        if os.path.exists(_default_ref_txt):
+            with open(_default_ref_txt, encoding="utf-8") as _f:
+                used_ref_text = _f.read().strip()
+            log.info("[TTS] ref_text   : (assets/ref_file.txt) %s", used_ref_text[:60])
+        else:
+            used_ref_text = REF_TEXT
+            log.info("[TTS] ref_text   : (hardcoded default) %s", used_ref_text[:60])
+
     # ── 음성 생성 ──────────────────────────────────────────────
     log.info("[TTS] ── 요청 시작 ──────────────────────────")
     log.info("[TTS] 파일명      : %s", file.filename)
@@ -155,8 +204,6 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
         "[TTS] 입력 텍스트 : %s",
         syn_text[:120] + ("..." if len(syn_text) > 120 else ""),
     )
-    log.info("[TTS] ref_audio  : %s", REF_AUDIO_PATH)
-    log.info("[TTS] ref_text   : %s", REF_TEXT)
     log.info(
         "[TTS] 파라미터   : language=Auto x_vector_only=True max_new_tokens=2048 "
         "temperature=0.9 top_k=50 top_p=1.0 repetition_penalty=1.05"
@@ -166,8 +213,8 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
         wavs, sr = tts_model.generate_voice_clone(
             text=syn_text,
             language="Auto",
-            ref_audio=REF_AUDIO_PATH,
-            ref_text=REF_TEXT,
+            ref_audio=used_ref_audio,
+            ref_text=used_ref_text,
             x_vector_only_mode=True,
             max_new_tokens=2048,
             do_sample=True,
@@ -183,6 +230,12 @@ async def tts(file: UploadFile = File(..., description=".txt 파일을 업로드
     except Exception as e:
         log.error("[TTS] 생성 실패: %s", e)
         raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
+    finally:
+        for _f in _tmp_files:
+            try:
+                os.remove(_f)
+            except OSError:
+                pass
 
     elapsed = time.time() - t0
     log.info("[TTS] 생성 완료  : %.2fs", elapsed)

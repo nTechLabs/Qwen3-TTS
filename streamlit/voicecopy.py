@@ -179,6 +179,37 @@ st.caption(f"글자 수: {char_count}자")
 st.divider()
 st.markdown("## STEP 3 · 음성 합성 (TTS) & 재생")
 
+# ── 참조 파일 선택 (접힌 상태로 시작) ────────────────────────────
+with st.expander(
+    "🎤 참조 음성 파일 변경 (선택 · 미입력 시 기본값: assets/Donald_Trump_VoiceSample.wav)",
+    expanded=False,
+):
+    tts_ref_audio = st.file_uploader(
+        "참조 음성 파일 (ref_audio_file)",
+        type=["mp3", "wav", "m4a", "ogg", "flac", "webm"],
+        key="tts_ref_audio",
+        help="업로드하지 않으면 서버의 assets/Donald_Trump_VoiceSample.wav 를 사용합니다.",
+    )
+    if tts_ref_audio:
+        st.audio(tts_ref_audio, format=f"audio/{tts_ref_audio.name.rsplit('.', 1)[-1]}")
+        st.caption(f"선택된 파일: {tts_ref_audio.name}")
+
+with st.expander(
+    "📄 참조 텍스트 파일 변경 (선택 · 미입력 시 기본값: assets/ref_file.txt)",
+    expanded=False,
+):
+    tts_ref_text_file = st.file_uploader(
+        "참조 텍스트 파일 (ref_file, .txt)",
+        type=["txt"],
+        key="tts_ref_file",
+        help="업로드하지 않으면 서버의 assets/ref_file.txt 를 사용합니다.",
+    )
+    if tts_ref_text_file:
+        preview = tts_ref_text_file.read().decode("utf-8", errors="replace")
+        tts_ref_text_file.seek(0)
+        st.caption(f"선택된 파일: {tts_ref_text_file.name}")
+        st.text(preview[:200] + ("..." if len(preview) > 200 else ""))
+
 tts_btn = st.button(
     "▶ TTS 생성",
     disabled=(char_count == 0),
@@ -197,9 +228,26 @@ if tts_btn:
 
         with st.spinner("음성을 합성 중... (수 분 소요될 수 있습니다)"):
             try:
+                files = {
+                    "file": (txt_filename, io.BytesIO(txt_bytes), "text/plain"),
+                }
+                if tts_ref_audio:
+                    tts_ref_audio.seek(0)
+                    files["ref_audio_file"] = (
+                        tts_ref_audio.name,
+                        tts_ref_audio.read(),
+                        tts_ref_audio.type or "audio/wav",
+                    )
+                if tts_ref_text_file:
+                    tts_ref_text_file.seek(0)
+                    files["ref_file"] = (
+                        tts_ref_text_file.name,
+                        tts_ref_text_file.read(),
+                        "text/plain",
+                    )
                 resp = requests.post(
                     f"{API_BASE}/tts",
-                    files={"file": (txt_filename, io.BytesIO(txt_bytes), "text/plain")},
+                    files=files,
                     timeout=600,
                 )
                 if resp.ok:
